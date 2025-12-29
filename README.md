@@ -1,8 +1,8 @@
-# 🍽️ Mealprint
+# 🍽️ Mealprint AI
 
-**Smart Meal Planning Made Social**
+**Smart Meal Planning Made Social with AI**
 
-Mealprint is a modern meal planning application that combines AI-powered meal inspiration, comprehensive meal planning, and social features to make healthy eating enjoyable and social.
+Mealprint AI is a modern meal planning application that combines AI-powered meal inspiration, comprehensive meal planning, and social features to make healthy eating enjoyable and social.
 
 ## ✨ Features
 
