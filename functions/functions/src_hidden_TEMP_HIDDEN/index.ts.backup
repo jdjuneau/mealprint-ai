@@ -1,0 +1,932 @@
+/**
+ * Firebase Cloud Functions
+ * Payment Processing & Subscription Management
+ */
+
+import * as functions from 'firebase-functions'
+import * as admin from 'firebase-admin'
+import Stripe from 'stripe'
+import axios from 'axios'
+
+admin.initializeApp()
+
+// Import updateUserPlatforms AFTER admin is initialized
+import { updateUserPlatforms } from './updateUserPlatforms'
+
+// Stripe configuration - temporarily hardcoded for deployment
+const stripe = new Stripe('sk_test_51NGexampleYourStripeKeyHere', {
+  apiVersion: '2023-10-16',
+})
+
+// PayPal Configuration - temporarily hardcoded for deployment
+const PAYPAL_CLIENT_ID = 'ATjYwsGSIyMEAfnSsR-u-xangl29laC6aYxnWxdeguGSYPQn0s6MgCktD7_3VtfKcIdNVczmPh6mXe_C'
+const PAYPAL_CLIENT_SECRET = 'EBE35uUSnXdNVCvTahITdU9_TPLhLkpdJS8KRdXhDTgqgtrPI7O9R6UyD3dSH9B4B-LB0Rw1iIWxrT8h'
+const PAYPAL_MODE = 'sandbox' // 'sandbox' or 'live'
+const PAYPAL_BASE_URL = PAYPAL_MODE === 'live' 
+  ? 'https://api-m.paypal.com' 
+  : 'https://api-m.sandbox.paypal.com'
+
+/**
+ * Get PayPal access token
+ */
+async function getPayPalAccessToken(): Promise<string> {
+  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64')
+  
+  const response = await axios.post(
+    `${PAYPAL_BASE_URL}/v1/oauth2/token`,
+    'grant_type=client_credentials',
+    {
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    }
+  )
+  
+  return response.data.access_token
+}
+
+/**
+ * Get subscription plans
+ * Returns available plans from Stripe and PayPal
+ */
+export const getSubscriptionPlans = functions.https.onCall(async (data, context) => {
+  try {
+    // Verify authentication
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const platform = data.platform || 'web'
+
+    // Get Stripe plans (with error handling for missing/invalid keys)
+    let stripePlans: Stripe.ApiList<Stripe.Price> = { data: [], has_more: false, object: 'list', url: '' }
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY
+      if (stripeKey && stripeKey.length > 0) {
+        stripePlans = await stripe.prices.list({
+          active: true,
+          type: 'recurring',
+          limit: 100,
+        })
+      } else {
+        console.warn('Stripe secret key not configured - using fallback plans')
+      }
+    } catch (stripeError: any) {
+      console.warn('Error fetching Stripe plans (using fallback):', stripeError.message)
+      // Continue with fallback plans
+    }
+
+    // Get PayPal plans (from Firestore or create from Stripe equivalents)
+    // For now, we'll use Firestore to store PayPal plan mappings
+    const db = admin.firestore()
+    const plansDoc = await db.collection('subscriptionPlans').doc('default').get()
+    const paypalPlans = plansDoc.exists ? plansDoc.data()?.paypalPlans || [] : []
+
+    // If Stripe plans failed or empty, use fallback
+    const stripePlanList = stripePlans.data.length > 0 
+      ? stripePlans.data.map(price => ({
+          id: `pro_${price.recurring?.interval}_stripe`,
+          name: `Pro ${price.recurring?.interval === 'month' ? 'Monthly' : 'Yearly'}`,
+          price: price.unit_amount ? price.unit_amount / 100 : 9.99,
+          currency: price.currency.toUpperCase(),
+          interval: price.recurring?.interval || 'month',
+          provider: 'stripe' as const,
+          providerPlanId: price.id,
+          features: [
+            'Unlimited AI features',
+            'Weekly meal blueprints',
+            'Recipe analysis',
+            'Priority support',
+          ],
+        }))
+      : [
+          // Fallback Stripe plans when API fails
+          {
+            id: 'pro_monthly_stripe',
+            name: 'Pro Monthly',
+            price: 9.99,
+            currency: 'USD',
+            interval: 'month' as const,
+            provider: 'stripe' as const,
+            providerPlanId: 'price_pro_monthly',
+            features: [
+              'Unlimited AI features',
+              'Weekly meal blueprints',
+              'Recipe analysis',
+              'Priority support',
+            ],
+          },
+          {
+            id: 'pro_yearly_stripe',
+            name: 'Pro Yearly',
+            price: 99.99,
+            currency: 'USD',
+            interval: 'year' as const,
+            provider: 'stripe' as const,
+            providerPlanId: 'price_pro_yearly',
+            features: [
+              'Unlimited AI features',
+              'Weekly meal blueprints',
+              'Recipe analysis',
+              'Priority support',
+              'Save 17% vs monthly',
+            ],
+          },
+        ]
+
+    const plans = [
+      // Stripe Plans
+      ...stripePlanList,
+      
+      // PayPal Plans (fallback if not in Firestore)
+      ...(paypalPlans.length === 0 ? [
+        {
+          id: 'pro_monthly_paypal',
+          name: 'Pro Monthly (PayPal)',
+          price: 9.99,
+          currency: 'USD',
+          interval: 'month' as const,
+          provider: 'paypal' as const,
+          providerPlanId: 'paypal_pro_monthly',
+          features: [
+            'Unlimited AI features',
+            'Weekly meal blueprints',
+            'Recipe analysis',
+            'Priority support',
+          ],
+        },
+        {
+          id: 'pro_yearly_paypal',
+          name: 'Pro Yearly (PayPal)',
+          price: 99.99,
+          currency: 'USD',
+          interval: 'year' as const,
+          provider: 'paypal' as const,
+          providerPlanId: 'paypal_pro_yearly',
+          features: [
+            'Unlimited AI features',
+            'Weekly meal blueprints',
+            'Recipe analysis',
+            'Priority support',
+            'Save 17% vs monthly',
+          ],
+        },
+      ] : paypalPlans),
+    ]
+
+    return { plans, platform }
+  } catch (error: any) {
+    console.error('Error getting subscription plans:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to get plans')
+  }
+})
+
+/**
+ * Create Stripe checkout session
+ * NOTE: This function is now imported from payments.ts
+ * The duplicate has been removed to avoid conflicts
+ * The function is exported from lib/payments.js and imported in index.js
+ */
+
+/**
+ * Verify Stripe payment
+ */
+export const verifyStripePayment = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { sessionId, userId, platform } = data
+
+    if (!sessionId || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters')
+    }
+
+    // Get session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
+
+    if (session.payment_status !== 'paid' || session.status !== 'complete') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not completed')
+    }
+
+    // Verify user matches
+    if (session.client_reference_id !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'User mismatch')
+    }
+
+    // Get subscription from Stripe
+    const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+
+    // Update payment session
+    await admin.firestore().collection('paymentSessions').doc(sessionId).update({
+      status: 'completed',
+      subscriptionId: subscription.id,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    // Update user subscription - preserve cross-platform data
+    const userRef = admin.firestore().collection('users').doc(userId)
+    const userDoc = await userRef.get()
+    const userData = userDoc.data() || {}
+    const existingSubscription = userData.subscription || {}
+    const existingPlatforms = userData.platforms || []
+    const updatedPlatforms = existingPlatforms.includes(platform || 'web')
+      ? existingPlatforms
+      : [...existingPlatforms, platform || 'web']
+
+    // Merge with existing subscription data to preserve cross-platform info
+    // CRITICAL: Preserve paymentProvider, subscriptionId, and other fields from Android/iOS purchases
+    const subscriptionData = {
+      ...existingSubscription, // Preserve existing subscription data
+      tier: 'pro',
+      status: 'active',
+      paymentProvider: 'stripe', // Update to Stripe for this purchase
+      subscriptionId: subscription.id,
+      startDate: admin.firestore.Timestamp.fromDate(new Date()),
+      endDate: subscription.current_period_end
+        ? admin.firestore.Timestamp.fromDate(new Date(subscription.current_period_end * 1000))
+        : null,
+      billingCycle: subscription.items.data[0]?.price.recurring?.interval || 'month',
+      platforms: updatedPlatforms,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+      // Preserve isActive field for Android compatibility
+      isActive: true,
+    }
+
+    await userRef.update({
+      subscription: subscriptionData,
+      platform: platform || 'web',
+      platforms: [...new Set(updatedPlatforms)].sort(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      subscriptionId: subscription.id,
+    }
+  } catch (error: any) {
+    console.error('Error verifying Stripe payment:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Payment verification failed')
+  }
+})
+
+/**
+ * Create PayPal order
+ */
+export const createPayPalOrder = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { userId, planId, platform, returnUrl, cancelUrl } = data
+
+    if (!userId || !planId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters')
+    }
+
+    // Get plan details
+    const planDoc = await admin.firestore().collection('subscriptionPlans').doc(planId).get()
+    const plan = planDoc.exists ? planDoc.data() : null
+    
+    const isYearly = planId.includes('yearly')
+    const amount = plan?.price || (isYearly ? 99.99 : 9.99)
+    const currency = plan?.currency || 'USD'
+
+    // Get PayPal access token
+    const accessToken = await getPayPalAccessToken()
+
+    // Use provided URLs or fall back to base_url config (for local testing support)
+    const baseUrl = process.env.APP_BASE_URL || 'https://coachie.app'
+    const finalReturnUrl = returnUrl || `${baseUrl}/subscription?success=true&token={TOKEN}`
+    const finalCancelUrl = cancelUrl || `${baseUrl}/subscription?canceled=true`
+
+    // Create PayPal order
+    const orderData = {
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          amount: {
+            currency_code: currency,
+            value: amount.toFixed(2),
+          },
+          description: `Coachie Pro ${isYearly ? 'Yearly' : 'Monthly'} Subscription`,
+        },
+      ],
+      application_context: {
+        brand_name: 'Coachie',
+        landing_page: 'BILLING',
+        user_action: 'PAY_NOW',
+        return_url: finalReturnUrl,
+        cancel_url: finalCancelUrl,
+      },
+    }
+
+    const response = await axios.post(
+      `${PAYPAL_BASE_URL}/v2/checkout/orders`,
+      orderData,
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    const order = response.data
+
+    // Store order in Firestore
+    await admin.firestore().collection('paymentSessions').doc(order.id).set({
+      userId,
+      platform: platform || 'web',
+      planId,
+      provider: 'paypal',
+      status: 'pending',
+      amount,
+      currency,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    // Find approval URL
+    const approvalUrl = order.links?.find((link: any) => link.rel === 'approve')?.href
+
+    return {
+      orderId: order.id,
+      approvalUrl,
+    }
+  } catch (error: any) {
+    console.error('Error creating PayPal order:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to create PayPal order')
+  }
+})
+
+/**
+ * Verify PayPal payment
+ */
+export const verifyPayPalPayment = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { sessionId, userId, platform } = data // sessionId is PayPal order ID
+
+    if (!sessionId || !userId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters')
+    }
+
+    // Get order from Firestore
+    const orderDoc = await admin.firestore().collection('paymentSessions').doc(sessionId).get()
+    if (!orderDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Order not found')
+    }
+
+    const orderData = orderDoc.data()
+    if (orderData?.userId !== userId) {
+      throw new functions.https.HttpsError('permission-denied', 'User mismatch')
+    }
+
+    // Get PayPal access token
+    const accessToken = await getPayPalAccessToken()
+
+    // Capture PayPal order
+    const response = await axios.post(
+      `${PAYPAL_BASE_URL}/v2/checkout/orders/${sessionId}/capture`,
+      {},
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    const order = response.data
+
+    if (order.status !== 'COMPLETED') {
+      throw new functions.https.HttpsError('failed-precondition', 'Payment not completed')
+    }
+
+    // Update payment session
+    await admin.firestore().collection('paymentSessions').doc(sessionId).update({
+      status: 'completed',
+      paypalOrderId: order.id,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    // Calculate subscription end date
+    const isYearly = orderData.planId?.includes('yearly')
+    const endDate = new Date()
+    endDate.setMonth(endDate.getMonth() + (isYearly ? 12 : 1))
+
+    // Update user subscription - preserve cross-platform data
+    const userRef = admin.firestore().collection('users').doc(userId)
+    const userDoc = await userRef.get()
+    const userData = userDoc.data() || {}
+    const existingSubscription = userData.subscription || {}
+    const existingPlatforms = userData.platforms || []
+    const updatedPlatforms = existingPlatforms.includes(platform || 'web')
+      ? existingPlatforms
+      : [...existingPlatforms, platform || 'web']
+
+    // Merge with existing subscription data to preserve cross-platform info
+    // CRITICAL: Preserve paymentProvider, subscriptionId, and other fields from Android/iOS purchases
+    const subscriptionData = {
+      ...existingSubscription, // Preserve existing subscription data
+      tier: 'pro',
+      status: 'active',
+      paymentProvider: 'paypal', // Update to PayPal for this purchase
+      subscriptionId: order.id,
+      startDate: admin.firestore.Timestamp.fromDate(new Date()),
+      endDate: admin.firestore.Timestamp.fromDate(endDate),
+      billingCycle: isYearly ? 'year' : 'month',
+      platforms: updatedPlatforms,
+      cancelAtPeriodEnd: false,
+      // Preserve isActive field for Android compatibility
+      isActive: true,
+    }
+
+    await userRef.update({
+      subscription: subscriptionData,
+      platform: platform || 'web',
+      platforms: [...new Set(updatedPlatforms)].sort(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return {
+      success: true,
+      subscriptionId: order.id,
+    }
+  } catch (error: any) {
+    console.error('Error verifying PayPal payment:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Payment verification failed')
+  }
+})
+
+/**
+ * Process Stripe webhook
+ */
+export const processStripeWebhook = functions.https.onRequest(async (req, res) => {
+  const sig = req.headers['stripe-signature']
+
+  if (!sig) {
+    res.status(400).send('No signature')
+    return
+  }
+
+  try {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ''
+    const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object as Stripe.Checkout.Session
+        await handleStripeCheckoutCompleted(session)
+        break
+
+      case 'customer.subscription.updated':
+        const subscription = event.data.object as Stripe.Subscription
+        await handleStripeSubscriptionUpdated(subscription)
+        break
+
+      case 'customer.subscription.deleted':
+        const deletedSubscription = event.data.object as Stripe.Subscription
+        await handleStripeSubscriptionDeleted(deletedSubscription)
+        break
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`)
+    }
+
+    res.json({ received: true })
+  } catch (error: any) {
+    console.error('Webhook error:', error)
+    res.status(400).send(`Webhook Error: ${error.message}`)
+  }
+})
+
+/**
+ * Handle Stripe checkout completed
+ */
+async function handleStripeCheckoutCompleted(session: Stripe.Checkout.Session) {
+  const userId = session.client_reference_id || session.metadata?.userId
+
+  if (!userId || !session.subscription) {
+    console.error('Missing userId or subscription in session')
+    return
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+  
+  // Update user subscription (same logic as verifyStripePayment)
+  const userRef = admin.firestore().collection('users').doc(userId)
+  const userDoc = await userRef.get()
+  const userData = userDoc.data() || {}
+  const existingPlatforms = userData.platforms || []
+  const platform = session.metadata?.platform || 'web'
+  const updatedPlatforms = existingPlatforms.includes(platform)
+    ? existingPlatforms
+    : [...existingPlatforms, platform]
+
+  const subscriptionData = {
+    tier: 'pro',
+    status: 'active',
+    paymentProvider: 'stripe',
+    subscriptionId: subscription.id,
+    startDate: admin.firestore.Timestamp.fromDate(new Date()),
+    endDate: subscription.current_period_end
+      ? admin.firestore.Timestamp.fromDate(new Date(subscription.current_period_end * 1000))
+      : null,
+    billingCycle: subscription.items.data[0]?.price.recurring?.interval || 'month',
+    platforms: updatedPlatforms,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+  }
+
+  await userRef.update({
+    subscription: subscriptionData,
+    platform: platform,
+    platforms: [...new Set(updatedPlatforms)].sort(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+
+  // Update payment session
+  await admin.firestore().collection('paymentSessions').doc(session.id).update({
+    status: 'completed',
+    subscriptionId: subscription.id,
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+}
+
+/**
+ * Handle Stripe subscription updated
+ */
+async function handleStripeSubscriptionUpdated(subscription: Stripe.Subscription) {
+  // Find user by subscription ID
+  const usersSnapshot = await admin.firestore()
+    .collection('users')
+    .where('subscription.subscriptionId', '==', subscription.id)
+    .limit(1)
+    .get()
+
+  if (usersSnapshot.empty) {
+    console.error('User not found for subscription:', subscription.id)
+    return
+  }
+
+  const userRef = usersSnapshot.docs[0].ref
+  const userData = usersSnapshot.docs[0].data()
+
+  const subscriptionData = {
+    ...userData.subscription,
+    status: subscription.status === 'active' ? 'active' : 'canceled',
+    endDate: subscription.current_period_end
+      ? admin.firestore.Timestamp.fromDate(new Date(subscription.current_period_end * 1000))
+      : userData.subscription?.endDate,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+  }
+
+  await userRef.update({
+    subscription: subscriptionData,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+}
+
+/**
+ * Handle Stripe subscription deleted
+ */
+async function handleStripeSubscriptionDeleted(subscription: Stripe.Subscription) {
+  // Find user by subscription ID
+  const usersSnapshot = await admin.firestore()
+    .collection('users')
+    .where('subscription.subscriptionId', '==', subscription.id)
+    .limit(1)
+    .get()
+
+  if (usersSnapshot.empty) {
+    console.error('User not found for subscription:', subscription.id)
+    return
+  }
+
+  const userRef = usersSnapshot.docs[0].ref
+
+  const subscriptionData = {
+    tier: 'free',
+    status: 'expired',
+    paymentProvider: null,
+    subscriptionId: null,
+    endDate: admin.firestore.Timestamp.fromDate(new Date()),
+    cancelAtPeriodEnd: false,
+  }
+
+  await userRef.update({
+    subscription: subscriptionData,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+}
+
+/**
+ * Process PayPal webhook
+ */
+export const processPayPalWebhook = functions.https.onRequest(async (req, res) => {
+  try {
+    const event = req.body
+
+    // Verify webhook signature (implement PayPal webhook verification)
+    // For now, we'll process the event
+
+    switch (event.event_type) {
+      case 'PAYMENT.SALE.COMPLETED':
+        await handlePayPalPaymentCompleted(event.resource)
+        break
+
+      case 'BILLING.SUBSCRIPTION.CANCELLED':
+        await handlePayPalSubscriptionCancelled(event.resource)
+        break
+
+      default:
+        console.log(`Unhandled PayPal event type: ${event.event_type}`)
+    }
+
+    res.status(200).send('OK')
+  } catch (error: any) {
+    console.error('PayPal webhook error:', error)
+    res.status(400).send(`Webhook Error: ${error.message}`)
+  }
+})
+
+/**
+ * Handle PayPal payment completed
+ */
+async function handlePayPalPaymentCompleted(resource: any) {
+  const orderId = resource.billing_agreement_id || resource.id
+  const orderDoc = await admin.firestore().collection('paymentSessions').doc(orderId).get()
+
+  if (!orderDoc.exists) {
+    console.error('Payment session not found:', orderId)
+    return
+  }
+
+  const orderData = orderDoc.data()
+  const userId = orderData?.userId
+
+  if (!userId) {
+    console.error('UserId not found in payment session')
+    return
+  }
+
+  // Update user subscription (similar to verifyPayPalPayment)
+  // This handles recurring payments
+  const userRef = admin.firestore().collection('users').doc(userId)
+  const userDoc = await userRef.get()
+  const userData = userDoc.data() || {}
+
+  const existingPlatforms = userData.platforms || []
+  const platform = orderData.platform || 'web'
+  const updatedPlatforms = existingPlatforms.includes(platform)
+    ? existingPlatforms
+    : [...existingPlatforms, platform]
+
+  const isYearly = orderData.planId?.includes('yearly')
+  const endDate = new Date()
+  endDate.setMonth(endDate.getMonth() + (isYearly ? 12 : 1))
+
+  const subscriptionData = {
+    tier: 'pro',
+    status: 'active',
+    paymentProvider: 'paypal',
+    subscriptionId: orderId,
+    startDate: admin.firestore.Timestamp.fromDate(new Date()),
+    endDate: admin.firestore.Timestamp.fromDate(endDate),
+    billingCycle: isYearly ? 'year' : 'month',
+    platforms: updatedPlatforms,
+    cancelAtPeriodEnd: false,
+  }
+
+  await userRef.update({
+    subscription: subscriptionData,
+    platform: platform,
+    platforms: [...new Set(updatedPlatforms)].sort(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+}
+
+/**
+ * Handle PayPal subscription cancelled
+ */
+async function handlePayPalSubscriptionCancelled(resource: any) {
+  const subscriptionId = resource.id
+
+  // Find user by subscription ID
+  const usersSnapshot = await admin.firestore()
+    .collection('users')
+    .where('subscription.subscriptionId', '==', subscriptionId)
+    .where('subscription.paymentProvider', '==', 'paypal')
+    .limit(1)
+    .get()
+
+  if (usersSnapshot.empty) {
+    console.error('User not found for PayPal subscription:', subscriptionId)
+    return
+  }
+
+  const userRef = usersSnapshot.docs[0].ref
+
+  const subscriptionData = {
+    tier: 'free',
+    status: 'canceled',
+    paymentProvider: null,
+    subscriptionId: null,
+    endDate: admin.firestore.Timestamp.fromDate(new Date()),
+    cancelAtPeriodEnd: false,
+  }
+
+  await userRef.update({
+    subscription: subscriptionData,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  })
+}
+
+/**
+ * Cancel Stripe subscription
+ */
+export const cancelStripeSubscription = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { userId, subscriptionId, platform } = data
+
+    if (!userId || !subscriptionId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters')
+    }
+
+    // Verify user owns subscription
+    const userDoc = await admin.firestore().collection('users').doc(userId).get()
+    const userData = userDoc.data()
+
+    if (userData?.subscription?.subscriptionId !== subscriptionId) {
+      throw new functions.https.HttpsError('permission-denied', 'Subscription not found')
+    }
+
+    // Cancel subscription at period end
+    await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
+    })
+
+    // Update user subscription
+    await admin.firestore().collection('users').doc(userId).update({
+      'subscription.cancelAtPeriodEnd': true,
+      'subscription.status': 'active', // Still active until period ends
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error canceling Stripe subscription:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to cancel subscription')
+  }
+})
+
+/**
+ * Cancel PayPal subscription
+ */
+export const cancelPayPalSubscription = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { userId, subscriptionId, platform } = data
+
+    if (!userId || !subscriptionId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required parameters')
+    }
+
+    // Verify user owns subscription
+    const userDoc = await admin.firestore().collection('users').doc(userId).get()
+    const userData = userDoc.data()
+
+    if (userData?.subscription?.subscriptionId !== subscriptionId) {
+      throw new functions.https.HttpsError('permission-denied', 'Subscription not found')
+    }
+
+    // Get PayPal access token
+    const accessToken = await getPayPalAccessToken()
+
+    // Cancel PayPal subscription
+    await axios.post(
+      `${PAYPAL_BASE_URL}/v1/billing/subscriptions/${subscriptionId}/cancel`,
+      {
+        reason: 'User requested cancellation',
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+
+    // Update user subscription
+    await admin.firestore().collection('users').doc(userId).update({
+      subscription: {
+        tier: 'free',
+        status: 'canceled',
+        paymentProvider: null,
+        subscriptionId: null,
+        endDate: admin.firestore.Timestamp.fromDate(new Date()),
+        cancelAtPeriodEnd: false,
+      },
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    })
+
+    return { success: true }
+  } catch (error: any) {
+    console.error('Error canceling PayPal subscription:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to cancel subscription')
+  }
+})
+
+/**
+ * Get subscription status
+ */
+export const getSubscriptionStatus = functions.https.onCall(async (data, context) => {
+  try {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated')
+    }
+
+    const { userId, platform } = data
+    const targetUserId = userId || context.auth.uid
+
+    const userDoc = await admin.firestore().collection('users').doc(targetUserId).get()
+
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'User not found')
+    }
+
+    const userData = userDoc.data()
+    const subscription = userData?.subscription
+
+    if (!subscription) {
+      return { active: false }
+    }
+
+    // Check if subscription is still active
+    const isActive = subscription.status === 'active' && 
+      (!subscription.endDate || subscription.endDate.toDate() > new Date())
+
+    return {
+      active: isActive,
+      provider: subscription.paymentProvider,
+      subscriptionId: subscription.subscriptionId,
+    }
+  } catch (error: any) {
+    console.error('Error getting subscription status:', error)
+    throw new functions.https.HttpsError('internal', error.message || 'Failed to get subscription status')
+  }
+})
+
+// Export updateUserPlatforms function
+export { updateUserPlatforms }
+
+// Import and export generateMealRecommendation
+import { generateMealRecommendation } from './generateMealRecommendation'
+export { generateMealRecommendation }
+
+// Import and export grantTestSubscription
+import { grantTestSubscription } from './grantTestSubscription'
+export { grantTestSubscription }
+
+// Import and export onNewUserCreated (welcome brief trigger) and manual triggers
+import { onNewUserCreated, triggerMorningBrief } from './scheduledBriefs'
+export { onNewUserCreated, triggerMorningBrief }
+
+// Import and export grantProByEmail
+import { grantProByEmail } from './grantProByEmail'
+export { grantProByEmail }
+
+// Import and export dashboard snapshot functions
+import { createWeeklySnapshot, createMonthlySnapshot, createSnapshotManual } from './createDashboardSnapshot'
+export { createWeeklySnapshot, createMonthlySnapshot, createSnapshotManual }
+
+// Import and export Google Play RTDN handler
+import { processGooglePlayRTDN } from './googlePlayRTDN'
+export { processGooglePlayRTDN }
+
+// Import and export verifyPurchase
+import { verifyPurchase } from './verifyPurchase'
+export { verifyPurchase }
+
+// Export scheduled brief functions - these use pubsub.schedule for automatic daily execution
+// These are the PRIMARY brief functions that run automatically
+import { sendMorningBriefs, sendAfternoonBriefs, sendEveningBriefs } from './scheduledBriefs'
+export { sendMorningBriefs, sendAfternoonBriefs, sendEveningBriefs }
+
+// Export Cloud Tasks worker function for scalable brief processing
+import { processBriefTask } from './briefTaskQueue'
+export { processBriefTask }

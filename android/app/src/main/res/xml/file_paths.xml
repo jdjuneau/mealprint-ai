@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internal storage files directory for body scan photos -->
+    <files-path name="body_scans" path="body_scans/" />
+    <!-- External storage files directory for meal photos -->
+    <external-files-path name="meal_photos" path="Pictures/" />
+    <!-- External storage files directory for PDF documents -->
+    <external-files-path name="documents" path="Documents/" />
+    <!-- External storage files directory for data exports (GDPR/CCPA) -->
+    <external-files-path name="exports" path="." />
+    <!-- Cache directory for share images -->
+    <cache-path name="share_images" path="share_images/" />
+</paths>

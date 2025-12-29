@@ -1,0 +1,30 @@
+SIMPLIFIED PROMPT - Replace the massive prompt with this:
+
+Generate a complete 7-day meal plan (Monday through Sunday) for ${firstName}.
+
+User Profile:
+- Daily calories: ${dailyCalories}
+- Macros: ${macroGrams.protein}g protein, ${macroGrams.carbs}g carbs, ${macroGrams.fat}g fat per day
+- Dietary preference: ${dietaryPref}
+- Meals per day: ${mealsPerDay}${mealsPerDay === 2 ? ' (breakfast and dinner only, no lunch)' : mealsPerDay >= 3 ? ' (breakfast, lunch, and dinner required)' : ''}
+- Snacks per day: ${snacksPerDay}
+- Servings: ${householdSize}
+- Allergies: ${Array.isArray(allergies) && allergies.length ? allergies.join(", ") : "none"}
+- Dislikes: ${[...(Array.isArray(dislikes) ? dislikes : []), ...(Array.isArray(avoidedFoods) ? avoidedFoods : [])].join(", ") || "none"}
+- Favorite foods: ${Array.isArray(favoriteFoods) && favoriteFoods.length ? favoriteFoods.join(", ") : "variety"}
+- Cooking style: ${cookingTimePref}, ${budgetLevel} budget
+
+Requirements:
+1. Generate ALL 7 days (Monday through Sunday) - the "meals" array must contain exactly 7 objects
+2. Each day must have ${mealsPerDay} meal(s)${mealsPerDay >= 3 ? ' (breakfast, lunch, dinner)' : mealsPerDay === 2 ? ' (breakfast, dinner)' : ''} plus ${snacksPerDay} snack(s)
+3. Meet daily macro targets: ${macroGrams.protein}g protein / ${macroGrams.carbs}g carbs / ${macroGrams.fat}g fat
+4. Follow ${dietaryPref} dietary guidelines
+5. Use variety: rotate cuisines, proteins, cooking methods, and vegetables throughout the week
+6. Shopping list: Maximum 25 unique items total (consolidate similar items, reuse ingredients across multiple days)
+7. Units: ${useImperial ? 'Use IMPERIAL units (lbs, oz, cups, fl oz, tbsp, tsp) for all ingredient quantities' : 'Use METRIC units (g, kg, ml, L) for all ingredient quantities'}
+
+${previousWeeksExclusion.length > 50 ? `\nPrevious meals to avoid (for variety):\n${previousWeeksExclusion.substring(0, 500)}\n` : ''}
+
+Output format (JSON only, no markdown):
+[Then include the JSON structure example]
+

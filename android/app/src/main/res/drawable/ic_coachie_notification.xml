@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Whistle design - simplified for notification -->
+    <path
+        android:pathData="M4,12 L8,10 L12,14 L16,10 L20,12 L18,16 L14,20 L10,20 L6,16 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Coach hat silhouette -->
+    <path
+        android:pathData="M8,6 L10,4 L14,4 L16,6 L14,8 L10,8 Z"
+        android:fillColor="#FFFFFF" />
+
+</vector>

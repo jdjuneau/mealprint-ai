@@ -1,0 +1,8 @@
+// TEMPORARY MINIMAL INDEX FOR BLUEPRINT DEPLOYMENT
+const admin = require('firebase-admin');
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+// Just re-export the function directly from the module
+const generateWeeklyShoppingList = require('./lib/generateWeeklyShoppingList');
+exports.generateWeeklyBlueprint = generateWeeklyShoppingList.generateWeeklyBlueprint;

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Green circle background -->
+    <path
+        android:pathData="M256,256m-256,0a256,256 0,1,1 512,0a256,256 0,1,1 -512,0"
+        android:fillColor="#4CAF50" />
+
+    <!-- Coach head (simplified cartoon style) -->
+    <path
+        android:pathData="M256,180c-30,0 -54,24 -54,54c0,20 11,37 27,47l-8,12c-6,9 -9,19 -9,30l0,35l72,0l0,-35c0,-11 -3,-21 -9,-30l-8,-12c16,-10 27,-27 27,-47c0,-30 -24,-54 -54,-54z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Coach eyes -->
+    <path
+        android:pathData="M240,200m-8,0a8,8 0,1,1 16,0a8,8 0,1,1 -16,0"
+        android:fillColor="#4CAF50" />
+    <path
+        android:pathData="M272,200m-8,0a8,8 0,1,1 16,0a8,8 0,1,1 -16,0"
+        android:fillColor="#4CAF50" />
+
+    <!-- Coach mouth -->
+    <path
+        android:pathData="M256,225c8,0 14,4 14,9c0,5 -6,9 -14,9s-14,-4 -14,-9c0,-5 6,-9 14,-9z"
+        android:fillColor="#4CAF50" />
+
+    <!-- Whistle -->
+    <path
+        android:pathData="M200,210l-15,5l-5,-15l15,-5z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Heart in hand (simplified) -->
+    <path
+        android:pathData="M320,280c-8,-8 -21,-8 -29,0l-15,15l-15,-15c-8,-8 -21,-8 -29,0c-8,8 -8,21 0,29l15,15l-15,15c-8,8 -8,21 0,29c8,8 21,8 29,0l15,-15l15,15c8,8 21,8 29,0c8,-8 8,-21 0,-29l-15,-15l15,-15c8,-8 8,-21 0,-29z"
+        android:fillColor="#FF5722" />
+
+    <!-- Hand holding heart -->
+    <path
+        android:pathData="M340,290c0,-10 -8,-18 -18,-18l-32,0c-5,0 -9,4 -9,9l0,22l59,0z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Hand fingers -->
+    <path
+        android:pathData="M310,290l-8,-12l-4,0l4,12z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M322,290l-8,-12l-4,0l4,12z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M334,290l-8,-12l-4,0l4,12z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M346,290l-8,-12l-4,0l4,12z"
+        android:fillColor="#FFFFFF" />
+
+</vector>

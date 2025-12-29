@@ -1,0 +1,31 @@
+# Firebase Configuration
+# Get these from Firebase Console > Project Settings > General > Your apps
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key_here
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id_here
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id_here
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id_here
+
+# OpenAI Configuration
+# Get this from https://platform.openai.com/api-keys
+NEXT_PUBLIC_OPENAI_API_KEY=your_openai_api_key_here
+
+# Gemini API Configuration (for free tier users)
+# Get this from https://aistudio.google.com/app/apikey
+# Note: This is used by Firebase Cloud Functions. For direct web usage, uncomment below.
+# GEMINI_API_KEY=your_gemini_api_key_here
+
+# Fitbit API Configuration
+# Get these from https://dev.fitbit.com/apps
+NEXT_PUBLIC_FITBIT_CLIENT_ID=your_fitbit_client_id_here
+FITBIT_CLIENT_SECRET=your_fitbit_client_secret_here
+
+# Strava API Configuration
+# Get these from https://www.strava.com/settings/api
+NEXT_PUBLIC_STRAVA_CLIENT_ID=your_strava_client_id_here
+STRAVA_CLIENT_SECRET=your_strava_client_secret_here
+
+# Garmin API Configuration (when available)
+# NEXT_PUBLIC_GARMIN_CLIENT_ID=your_garmin_client_id_here
+# GARMIN_CLIENT_SECRET=your_garmin_client_secret_here

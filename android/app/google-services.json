@@ -1,0 +1,58 @@
+{
+  "project_info": {
+    "project_number": "244622801791",
+    "firebase_url": "https://vanish-auth-real-default-rtdb.firebaseio.com",
+    "project_id": "vanish-auth-real",
+    "storage_bucket": "vanish-auth-real.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:244622801791:android:80d889862c89460ac7f84a",
+        "android_client_info": {
+          "package_name": "com.coachie.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "244622801791-t1pkdaqoh2d9f50cbldecute5suhsq3s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coachie.app",
+            "certificate_hash": "30f5809bb3522f28105f59ab83d48bb6d3c0f682"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3bCPJRv33TqEbG4_Fyj3JHTNWkp7G_eY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:244622801791:android:f18b349eec55046bc7f84a",
+        "android_client_info": {
+          "package_name": "com.vanish.privacy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3bCPJRv33TqEbG4_Fyj3JHTNWkp7G_eY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

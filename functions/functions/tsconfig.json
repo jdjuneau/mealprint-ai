@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "target": "ES2018",
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "lib", "**/*.test.ts"]
+}

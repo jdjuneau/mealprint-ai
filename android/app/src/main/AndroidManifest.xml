@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Internet permission for Firebase -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Camera permission for ML Kit pose detection -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Microphone permission for voice logging and voice commands -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Activity recognition for Google Fit workout detection -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Foreground service health type permission for Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
+    <!-- Notification permission for Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Exact alarm permissions removed - not needed since briefs are handled by Firebase Cloud Functions -->
+    <!-- All local reminders use setRepeating() which doesn't require exact alarms -->
+    <!-- SCHEDULE_EXACT_ALARM removed to avoid Google Play restrictions -->
+
+    <!-- Receive boot events to reschedule nudges -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Vibration permission for meditation haptic feedback -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Health Connect permissions -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Coachie"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="31">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Coachie">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Health Connect required meta-data -->
+        <meta-data
+            android:name="health_permissions"
+            android:resource="@array/health_permissions" />
+
+
+        <!-- FileProvider for camera photo sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- Firebase Cloud Messaging Service -->
+        <service
+            android:name=".data.FcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Local Nudge Notification Receiver -->
+        <receiver
+            android:name=".receiver.LocalNudgeReceiver"
+            android:exported="false" />
+
+        <!-- Habit Reminder Receiver -->
+        <receiver
+            android:name=".receiver.HabitReminderReceiver"
+            android:exported="false" />
+
+        <!-- Reschedule nudges after reboot or update -->
+        <receiver
+            android:name=".receiver.LocalNudgeBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Coachie Home Screen Widget -->
+        <receiver
+            android:name=".widget.CoachieWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/coachie_widget_info" />
+        </receiver>
+
+        <!-- Mindfulness Reminder Receiver -->
+        <receiver
+            android:name=".receiver.MindfulnessReminderReceiver"
+            android:exported="false" />
+
+        <!-- Proactive Health Receiver -->
+        <receiver
+            android:name=".receiver.ProactiveHealthReceiver"
+            android:exported="false" />
+
+        <!-- Anxiety Detection Service -->
+        <service
+            android:name=".service.AnxietyDetectionService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- Emergency Calm Service -->
+        <service
+            android:name=".service.EmergencyCalmService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- Social Media Break Service -->
+        <service
+            android:name=".service.SocialMediaBreakService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- Habit Timer Service -->
+        <service
+            android:name=".service.HabitTimerService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!-- Shake Detection Service -->
+        <service
+            android:name=".service.ShakeDetectionService"
+            android:exported="false" />
+
+    </application>
+
+</manifest>
